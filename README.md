@@ -24,3 +24,8 @@ in both the protocol and its custom payload encryption scheme.
 
 This package is usable without needing to be invested in the rest of the
 Hemtjänst ecosystem.
+
+## Discovery
+
+You can discover devices on your network using `cmd/airmatters`. It implements
+the same discovery mechanism as the AirMatters app, using multicast CoAP.
