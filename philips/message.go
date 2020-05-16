@@ -131,7 +131,7 @@ func EncodeMessage(sess SessionID, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("too few bytes")
 	}
 
-	padding := (16 - (len(msg) % 16)) % 16
+	padding := 16 - (len(msg) % 16)
 	for i := 0; i < padding; i++ {
 		msg = append(msg, byte(padding))
 	}
