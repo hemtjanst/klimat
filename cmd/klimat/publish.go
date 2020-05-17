@@ -69,7 +69,8 @@ func (c *publishConfig) Exec(ctx context.Context, args []string) error {
 		return err
 	}
 
-	mq := connectMqtt(ctx, c.mqttcfg())
+	cfg := c.mqttcfg()
+	mq := connectMqtt(ctx, cfg)
 	dev, err := client.NewDevice(&device.Info{
 		Topic:        fmt.Sprintf("climate/%s", info.DeviceID),
 		Name:         info.Name,
@@ -112,7 +113,7 @@ func (c *publishConfig) Exec(ctx context.Context, args []string) error {
 		return err
 	}
 
-	log.Print("Done initialising, publishing updates to MQTT")
+	log.Printf("Done initialising, publishing updates to MQTT on: %s", cfg.Address)
 
 	<-ctx.Done()
 	obs.Cancel()
