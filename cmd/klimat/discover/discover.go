@@ -1,4 +1,4 @@
-package main
+package discover
 
 import (
 	"context"
@@ -15,35 +15,36 @@ import (
 	"hemtjan.st/klimat/philips"
 )
 
-type discoverConfig struct {
+type config struct {
 	out  io.Writer
 	host string
 }
 
-func newDiscoverCmd(out io.Writer) *ffcli.Command {
-	config := discoverConfig{
+// NewCmd returns the discover subcommand
+func NewCmd(out io.Writer) *ffcli.Command {
+	c := config{
 		out:  out,
 		host: "",
 	}
 
-	discoverFlagset := flag.NewFlagSet("klimat discover", flag.ExitOnError)
-	discoverFlagset.StringVar(&config.host, "address", "224.0.1.187:5683", "host:port for multicast discovery")
+	fs := flag.NewFlagSet("klimat discover", flag.ExitOnError)
+	fs.StringVar(&c.host, "address", "224.0.1.187:5683", "host:port for multicast discovery")
 
 	return &ffcli.Command{
 		Name:       "discover",
 		ShortUsage: "discover [flags]",
-		FlagSet:    discoverFlagset,
+		FlagSet:    fs,
 		ShortHelp:  "Discover compatible devices on the network",
 		LongHelp: "The discover command uses multicat CoAP to discover devices " +
 			"on the network. It implements the same discovery procedure as the " +
 			"AirMatters app. The devices can be a bit finicky and may not always " +
 			"respond, so you might have to run this a few times to ensure you get " +
 			"a reply.",
-		Exec: config.Exec,
+		Exec: c.Exec,
 	}
 }
 
-func (c *discoverConfig) Exec(ctx context.Context, args []string) error {
+func (c *config) Exec(ctx context.Context, args []string) error {
 	client := &coap.MulticastClient{
 		DialTimeout: 5 * time.Second,
 	}

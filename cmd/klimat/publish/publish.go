@@ -1,4 +1,4 @@
-package main
+package publish
 
 import (
 	"context"
@@ -26,25 +26,26 @@ const (
 	twoWeeks = 336 // hours
 )
 
-type publishConfig struct {
+type config struct {
 	out     io.Writer
 	host    string
 	mqttcfg func() *mqtt.Config
 	debug   bool
 }
 
-func newPublishCmd(out io.Writer) *ffcli.Command {
-	publishFlagset := flag.NewFlagSet("klimat publish", flag.ExitOnError)
-	mqCfg := mqtt.MustFlags(publishFlagset.String, publishFlagset.Bool)
+// NewCmd returns the publish subcommand
+func NewCmd(out io.Writer) *ffcli.Command {
+	fs := flag.NewFlagSet("klimat publish", flag.ExitOnError)
+	mqCfg := mqtt.MustFlags(fs.String, fs.Bool)
 
-	config := publishConfig{
+	c := config{
 		out:     out,
 		host:    "",
 		mqttcfg: mqCfg,
 	}
 
-	publishFlagset.StringVar(&config.host, "address", "localhost:5683", "host:port to connect to")
-	publishFlagset.BoolVar(&config.debug, "debug", false, "enable debug output")
+	fs.StringVar(&c.host, "address", "localhost:5683", "host:port to connect to")
+	fs.BoolVar(&c.debug, "debug", false, "enable debug output")
 
 	return &ffcli.Command{
 		Name:       "publish",
@@ -53,12 +54,12 @@ func newPublishCmd(out io.Writer) *ffcli.Command {
 		LongHelp: "The publish command connects to a device over CoAP and " +
 			"starts to observe it. As it receives updates the device state and " +
 			"sensor data is extracted and published to MQTT.",
-		FlagSet: publishFlagset,
-		Exec:    config.Exec,
+		FlagSet: fs,
+		Exec:    c.Exec,
 	}
 }
 
-func (c *publishConfig) Exec(ctx context.Context, args []string) error {
+func (c *config) Exec(ctx context.Context, args []string) error {
 	cl, err := philips.New(ctx, c.host)
 	if err != nil {
 		return err

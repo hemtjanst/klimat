@@ -9,6 +9,9 @@ import (
 	"os/signal"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
+
+	"hemtjan.st/klimat/cmd/klimat/discover"
+	"hemtjan.st/klimat/cmd/klimat/publish"
 )
 
 var (
@@ -40,7 +43,7 @@ func main() {
 			"Right now it only supports interafcing with Philips AirCombi " +
 			"devices.",
 		FlagSet:     rootFlagset,
-		Subcommands: []*ffcli.Command{newDiscoverCmd(os.Stdout), newPublishCmd(os.Stdout)},
+		Subcommands: []*ffcli.Command{discover.NewCmd(os.Stdout), publish.NewCmd(os.Stdout)},
 		Exec: func(context.Context, []string) error {
 			return flag.ErrHelp
 		},
