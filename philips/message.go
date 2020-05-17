@@ -41,7 +41,10 @@ func ParseID(data []byte) SessionID {
 
 // NewID constructs a new valid SessionID
 func NewID() SessionID {
-	return SessionID(rnd.Uint32())
+	// Use Int31 to ensure the first bit is always 0. This should avoid
+	// hitting 32-bit integer wrap-around in a single session, unless
+	// you manage to send over 2 billion commands
+	return SessionID(rnd.Int31())
 }
 
 // Hex returns the hex representation of our SessionID
