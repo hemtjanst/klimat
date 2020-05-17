@@ -15,6 +15,7 @@ type Device struct {
 	addr string
 	cc   *coap.ClientConn
 	ctx  context.Context
+	id   *Session
 }
 
 // New returns a CoAP client configured to talk to a device
@@ -32,11 +33,26 @@ func New(ctx context.Context, address string) (*Device, error) {
 		return nil, fmt.Errorf("error dialing: %w", err)
 	}
 
-	return &Device{
+	d := &Device{
 		cc:   conn,
 		ctx:  ctx,
 		addr: address,
-	}, nil
+	}
+
+	sess := NewSession()
+	ctx, cancel := context.WithTimeout(d.ctx, 5*time.Second)
+	defer cancel()
+
+	rsp, err := d.cc.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
+	if err != nil {
+		return nil, fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
+	}
+
+	id := ParseID(rsp.Payload())
+	id.Increment()
+	d.id = id
+
+	return d, nil
 }
 
 // Info returns the decoded payload from /sys/dev/info
@@ -56,22 +72,53 @@ func (d *Device) Info() (*Info, error) {
 	return &info, nil
 }
 
-// Session returns the session ID. It must be called once, before you
-// do an Observe or want to send a command. After sending a command you
-// have to increment the ID
-func (d *Device) Session() (SessionID, error) {
-	sess := NewID()
+// Set lets you set a certain attribute of the device to its desired state.
+// This lets you do things like turn the device on and off.
+//
+// It's worth noting that the device also returns a "status: success" if you
+// send it complete nonesense that it couldn't make sense of, instead of a
+// failure. As such the error returned here is somewhat dubious and the caller
+// needs to know what they're doing for this to be at all useful. Aka, you have
+// to test in production.
+//
+// Also, doing something like turning the device on while it is already on
+// equally returns success.
+func (d *Device) Set(msg *Desired) error {
+	data, err := json.Marshal(
+		Status{
+			State: State{
+				Desired: msg,
+			},
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	newMsg, err := EncodeMessage(d.id, []byte(data))
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(d.ctx, 5*time.Second)
 	defer cancel()
 
-	rsp, err := d.cc.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
+	resp, err := d.cc.PostWithContext(ctx, "/sys/dev/control", coap.AppJSON, bytes.NewReader(newMsg))
 	if err != nil {
-		return 0, fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
+		return err
+	}
+	d.id.Increment()
+
+	state := map[string]string{}
+	err = json.Unmarshal(resp.Payload(), &state)
+	if err != nil {
+		return err
 	}
 
-	id := ParseID(rsp.Payload()) + 1
-
-	return id, nil
+	if state["status"] != "success" {
+		return fmt.Errorf("did not manage to set value")
+	}
+	return nil
 }
 
 // Status lets you subcrivbe to /sys/dev/status and get updates as the

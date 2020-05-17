@@ -103,11 +103,6 @@ func (c *config) Exec(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to create device: %w", err)
 	}
 
-	_, err = cl.Session()
-	if err != nil {
-		return fmt.Errorf("failed to initialise new session: %w", err)
-	}
-
 	log.Print("starting observer for status messages")
 	obs, err := cl.Status(handleObserve(dev))
 	if err != nil {

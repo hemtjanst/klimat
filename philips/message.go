@@ -10,16 +10,9 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
-
-// SessionID defines the starting ID of a "session". For every command
-// sent, the session ID needs to be incremented by one. You get the
-// starting ID by posting to /sys/dev/sync and storing the response
-//
-// It's more or less the CoAP Message ID, but they botched it by setting
-// a CoAP MID of 1 on every message, so we get this magic instead.
-type SessionID uint32
 
 const (
 	checksumLen = 32
@@ -30,30 +23,55 @@ var (
 	rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
+// Session defines the starting ID of a "session". For every command
+// sent, the session ID needs to be incremented by one. You get the
+// starting ID by posting to /sys/dev/sync and storing the response
+//
+// It's more or less the CoAP Message ID, but they botched it by setting
+// a CoAP MID of 1 on every message, so we get this magic instead.
+type Session struct {
+	id uint32
+	sync.Mutex
+}
+
+// Increment increments the Session ID, and must be called after a message
+// with the current ID was successfully sent.
+func (s *Session) Increment() {
+	s.Lock()
+	defer s.Unlock()
+	s.id++
+}
+
+// Hex returns the hex representation of our SessionID
+func (s *Session) Hex() string {
+	s.Lock()
+	defer s.Unlock()
+	return fmt.Sprintf("%08X", s.id)
+}
+
 // ParseID parses a sequence of bytes into a SessionID
-func ParseID(data []byte) SessionID {
+func ParseID(data []byte) *Session {
 	if len(data) > 8 {
 		data = data[:8]
 	}
 	s, _ := strconv.ParseUint(string(data), 16, 32)
-	return SessionID(s)
+	return &Session{
+		id: uint32(s),
+	}
 }
 
-// NewID constructs a new valid SessionID
-func NewID() SessionID {
+// NewSession constructs a new valid Session
+func NewSession() *Session {
 	// Use Int31 to ensure the first bit is always 0. This should avoid
 	// hitting 32-bit integer wrap-around in a single session, unless
 	// you manage to send over 2 billion commands
-	return SessionID(rnd.Int31())
+	return &Session{
+		id: uint32(rnd.Int31()),
+	}
 }
 
-// Hex returns the hex representation of our SessionID
-func (id SessionID) Hex() string {
-	return fmt.Sprintf("%08X", id)
-}
-
-func (id SessionID) keyIV() (key, iv []byte) {
-	keyAndIV := md5.Sum([]byte(magicWord + id.Hex()))
+func (s *Session) keyIV() (key, iv []byte) {
+	keyAndIV := md5.Sum([]byte(magicWord + s.Hex()))
 	// The key and IV are "stretched" from 8 bytes to 16 by hex encoding
 	// the two halves
 	key = []byte(strings.ToUpper(hex.EncodeToString(keyAndIV[0:8])))
@@ -63,8 +81,8 @@ func (id SessionID) keyIV() (key, iv []byte) {
 
 // Decrypt returns the plaintext for a message using AES-128 in CBC
 // with a key/IV derived from the SessionID
-func (id SessionID) Decrypt(data []byte) ([]byte, error) {
-	key, iv := id.keyIV()
+func (s *Session) Decrypt(data []byte) ([]byte, error) {
+	key, iv := s.keyIV()
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -77,8 +95,8 @@ func (id SessionID) Decrypt(data []byte) ([]byte, error) {
 
 // Encrypt returns the ciphertext for a message using AES-128 in CBC
 // with a key/IV derived from the SessionID
-func (id SessionID) Encrypt(data []byte) ([]byte, error) {
-	key, iv := id.keyIV()
+func (s *Session) Encrypt(data []byte) ([]byte, error) {
+	key, iv := s.keyIV()
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
@@ -129,7 +147,7 @@ func DecodeMessage(msg []byte) ([]byte, error) {
 
 // EncodeMessage returns the ciphertext of a message. This will generally be
 // a JSON encoded request
-func EncodeMessage(sess SessionID, msg []byte) ([]byte, error) {
+func EncodeMessage(sess *Session, msg []byte) ([]byte, error) {
 	if len(msg) == 0 {
 		return nil, fmt.Errorf("too few bytes")
 	}
