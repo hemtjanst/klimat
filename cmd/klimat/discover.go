@@ -7,53 +7,49 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
-	"os/signal"
 	"time"
 
 	"github.com/go-ocf/go-coap"
 	"github.com/go-ocf/go-coap/codes"
+	"github.com/peterbourgon/ff/v3/ffcli"
 	"hemtjan.st/klimat/philips"
 )
 
-var (
-	hostPort = flag.String("address", "224.0.1.187:5683", "host:port for multicast discovery")
-)
+var discoverFlagset = flag.NewFlagSet("klimat discover", flag.ExitOnError)
 
-func main() {
-	flag.Parse()
+type discoverConfig struct {
+	out  io.Writer
+	host string
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
+func newDiscoverCmd(out io.Writer) *ffcli.Command {
+	config := &discoverConfig{
+		out:  out,
+		host: "",
+	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	defer func() {
-		signal.Stop(c)
-		cancel()
-	}()
-	go func() {
-		select {
-		case <-c:
-			log.Print("Received cancellation signal, shutting down...")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
+	discoverFlagset.StringVar(&config.host, "address", "224.0.1.187:5683", "host:port for multicast discovery")
 
-	if err := run(ctx, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v", err)
-		os.Exit(1)
+	return &ffcli.Command{
+		Name:       "discover",
+		ShortUsage: "discover [flags]",
+		FlagSet:    discoverFlagset,
+		ShortHelp:  "Discover compatible devices on the network",
+		LongHelp: "The discover command uses multicat CoAP to discover devices " +
+			"on the network. It implements the same discovery procedure as the " +
+			"AirMatters app. The devices can be a bit finicky and may not always " +
+			"respond, so you might have to run this a few times to ensure you get " +
+			"a reply.",
+		Exec: config.Exec,
 	}
 }
 
-func run(ctx context.Context, out io.Writer) error {
-	log.SetOutput(out)
-
+func (c discoverConfig) Exec(ctx context.Context, args []string) error {
 	client := &coap.MulticastClient{
 		DialTimeout: 5 * time.Second,
 	}
 
-	conn, err := client.DialWithContext(ctx, *hostPort)
+	conn, err := client.DialWithContext(ctx, c.host)
 	if err != nil {
 		return fmt.Errorf("failed to dial: %w", err)
 	}

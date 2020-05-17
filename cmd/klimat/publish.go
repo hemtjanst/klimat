@@ -10,13 +10,12 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/signal"
 	"strconv"
 	"time"
 
 	"github.com/go-ocf/go-coap"
 	"github.com/go-ocf/go-coap/codes"
-
+	"github.com/peterbourgon/ff/v3/ffcli"
 	"hemtjan.st/klimat/philips"
 	"lib.hemtjan.st/client"
 	"lib.hemtjan.st/device"
@@ -29,9 +28,110 @@ const (
 )
 
 var (
-	hostPort = flag.String("address", "127.0.0.1:5683", "host:port for the purifier")
-	debug    = flag.Bool("debug", false, "Debug, prints lots of the raw payloads")
+	publishFlagset = flag.NewFlagSet("klimat publish", flag.ExitOnError)
 )
+
+type publishConfig struct {
+	out     io.Writer
+	host    string
+	mqttcfg func() *mqtt.Config
+	debug   bool
+}
+
+func newPublishCmd(out io.Writer) *ffcli.Command {
+	mqCfg := mqtt.MustFlags(publishFlagset.String, publishFlagset.Bool)
+
+	config := &publishConfig{
+		out:     out,
+		host:    "",
+		mqttcfg: mqCfg,
+	}
+
+	publishFlagset.StringVar(&config.host, "address", "localhost:5683", "host:port to connect to")
+	publishFlagset.BoolVar(&config.debug, "debug", false, "enable debug output")
+
+	return &ffcli.Command{
+		Name:       "publish",
+		ShortUsage: "publish [flags]",
+		ShortHelp:  "Publish sensor data to MQTT",
+		LongHelp: "The publish command connects to a device over CoAP and " +
+			"starts to observe it. As it receives updates the device state and " +
+			"sensor data is extracted and published to MQTT.",
+		FlagSet: publishFlagset,
+		Exec:    config.Exec,
+	}
+}
+
+func (c publishConfig) Exec(ctx context.Context, args []string) error {
+	cl := connectToDevice(ctx, c.host)
+	devInfo, err := getWithTimeout(ctx, cl, "/sys/dev/info")
+	if err != nil {
+		return fmt.Errorf("could not get device info: %w", err)
+	}
+	log.Print("Received device info")
+	if c.debug {
+		log.Printf("raw info: %s", devInfo.Payload())
+	}
+
+	var info philips.Info
+	if err := json.Unmarshal(devInfo.Payload(), &info); err != nil {
+		return fmt.Errorf("could not decode info: %w", err)
+	}
+
+	if c.debug {
+		log.Printf("info: %+v", info)
+	}
+
+	mq := connectMqtt(ctx, c.mqttcfg())
+	dev, err := client.NewDevice(&device.Info{
+		Topic:        fmt.Sprintf("climate/%s", info.DeviceID),
+		Name:         info.Name,
+		Manufacturer: "Philips",
+		Model:        info.ModelID,
+		SerialNumber: info.DeviceID,
+		Type:         "airPurifier",
+		Features: map[string]*feature.Info{
+			"on":                                 {},
+			"brightness":                         {},
+			"currentAirPurifierState":            {},
+			"targetAirPurifierState":             {},
+			"currentFanState":                    {},
+			"targetFanState":                     {},
+			"rotationSpeed":                      {},
+			"lockPhysicalControls":               {},
+			"airQuality":                         {},
+			"pm2_5Density":                       {},
+			"filterChangeIndication":             {},
+			"currentRelativeHumidity":            {},
+			"targetRelativeHumidity":             {},
+			"currentHumidifierDehumidifierState": {},
+			"targetHumidifierDehumidifierState":  {},
+			"currentTemperature":                 {},
+			"waterLevel":                         {},
+		},
+	}, mq)
+	if err != nil {
+		return fmt.Errorf("failed to create device: %w", err)
+	}
+
+	sess := philips.NewID()
+	_, err = cl.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
+	if err != nil {
+		return fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
+	}
+
+	obs, err := cl.ObserveWithContext(ctx, "/sys/dev/status", handleObserve(dev, c.debug))
+	if err != nil {
+		return fmt.Errorf("failed to start observe on /sys/dev/status: %w", err)
+	}
+
+	log.Print("Done initialising, publishing updates to MQTT")
+
+	<-ctx.Done()
+	obs.Cancel()
+
+	return nil
+}
 
 func connectToDevice(ctx context.Context, address string) *coap.ClientConn {
 	cl := coap.Client{
@@ -76,114 +176,13 @@ func getWithTimeout(ctx context.Context, cl *coap.ClientConn, path string) (coap
 	return cl.GetWithContext(timeout, path)
 }
 
-func run(ctx context.Context, address string, mqttConfig *mqtt.Config, out io.Writer) error {
-	log.SetOutput(out)
-
-	cl := connectToDevice(ctx, address)
-	devInfo, err := getWithTimeout(ctx, cl, "/sys/dev/info")
-	if err != nil {
-		return fmt.Errorf("could not get device info: %w", err)
-	}
-	log.Print("Received device info")
-	if *debug {
-		log.Printf("raw info: %s", devInfo.Payload())
-	}
-
-	var info philips.Info
-	if err := json.Unmarshal(devInfo.Payload(), &info); err != nil {
-		return fmt.Errorf("could not decode info: %w", err)
-	}
-
-	if *debug {
-		log.Printf("info: %+v", info)
-	}
-
-	mq := connectMqtt(ctx, mqttConfig)
-	dev, err := client.NewDevice(&device.Info{
-		Topic:        fmt.Sprintf("climate/%s", info.DeviceID),
-		Name:         info.Name,
-		Manufacturer: "Philips",
-		Model:        info.ModelID,
-		SerialNumber: info.DeviceID,
-		Type:         "airPurifier",
-		Features: map[string]*feature.Info{
-			"on":                                 {},
-			"brightness":                         {},
-			"currentAirPurifierState":            {},
-			"targetAirPurifierState":             {},
-			"currentFanState":                    {},
-			"targetFanState":                     {},
-			"rotationSpeed":                      {},
-			"lockPhysicalControls":               {},
-			"airQuality":                         {},
-			"pm2_5Density":                       {},
-			"filterChangeIndication":             {},
-			"currentRelativeHumidity":            {},
-			"targetRelativeHumidity":             {},
-			"currentHumidifierDehumidifierState": {},
-			"targetHumidifierDehumidifierState":  {},
-			"currentTemperature":                 {},
-			"waterLevel":                         {},
-		},
-	}, mq)
-	if err != nil {
-		return fmt.Errorf("failed to create device: %w", err)
-	}
-
-	sess := philips.NewID()
-	_, err = cl.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
-	if err != nil {
-		return fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
-	}
-
-	obs, err := cl.ObserveWithContext(ctx, "/sys/dev/status", handleObserve(dev))
-	if err != nil {
-		return fmt.Errorf("failed to start observe on /sys/dev/status: %w", err)
-	}
-
-	log.Print("Done initialising, publishing updates to MQTT")
-
-	<-ctx.Done()
-	obs.Cancel()
-
-	return nil
-}
-
-func main() {
-	mqCfg := mqtt.MustFlags(flag.String, flag.Bool)
-	flag.Parse()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	defer func() {
-		signal.Stop(c)
-		cancel()
-	}()
-	go func() {
-		select {
-		case <-c:
-			log.Print("Received cancellation signal, shutting down...")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
-	err := run(ctx, *hostPort, mqCfg(), os.Stdout)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		os.Exit(1)
-	}
-}
-
-func handleObserve(dev client.Device) func(req *coap.Request) {
+func handleObserve(dev client.Device, debug bool) func(req *coap.Request) {
 	// If the message was confirmable, confirm it before
 	// proceeding with decoding it. This ensures that even
 	// if we hit decoding issues, we always confirm the
 	// message so the device continues sending new messages
 	return func(req *coap.Request) {
-		if *debug {
+		if debug {
 			log.Printf("payload: %s", req.Msg.Payload())
 		}
 
@@ -205,7 +204,7 @@ func handleObserve(dev client.Device) func(req *coap.Request) {
 			log.Println(err)
 			return
 		}
-		if *debug {
+		if debug {
 			log.Printf("decoded message: %s", resp)
 		}
 
@@ -215,7 +214,7 @@ func handleObserve(dev client.Device) func(req *coap.Request) {
 			log.Println(err)
 			return
 		}
-		if *debug {
+		if debug {
 			log.Printf("status: %+v", data)
 		}
 
