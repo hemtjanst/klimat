@@ -256,13 +256,14 @@ type Reported struct {
 
 // Desired is used to send a new state on the device
 type Desired struct {
-	Power                  *Power      `json:"pwr,omitempty"`
-	Brightness             *Brightness `json:"aqil,omitempty"`
-	Mode                   *Mode       `json:"mode,omitempty"`
-	RelativeHumidityTarget *int        `json:"rhset,omitempty"`
-	Function               *Function   `json:"func,omitempty"`
-	ChildLock              *bool       `json:"cl,omitempty"`
-	FanSpeed               *FanSpeed   `json:"om,omitempty"`
+	Power                  *Power       `json:"pwr,omitempty"`
+	Brightness             *Brightness  `json:"aqil,omitempty"`
+	Mode                   *Mode        `json:"mode,omitempty"`
+	RelativeHumidityTarget *int         `json:"rhset,omitempty"`
+	Function               *Function    `json:"func,omitempty"`
+	ChildLock              *bool        `json:"cl,omitempty"`
+	FanSpeed               *FanSpeed    `json:"om,omitempty"`
+	DisplayMode            *DisplayMode `json:"ddp,omitempty"`
 }
 
 // BoolP returns a pointer to a boolean

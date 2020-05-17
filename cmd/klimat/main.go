@@ -10,6 +10,7 @@ import (
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 
+	"hemtjan.st/klimat/cmd/klimat/control"
 	"hemtjan.st/klimat/cmd/klimat/discover"
 	"hemtjan.st/klimat/cmd/klimat/publish"
 	"hemtjan.st/klimat/cmd/klimat/status"
@@ -45,6 +46,7 @@ func main() {
 			"devices.",
 		FlagSet: rootFlagset,
 		Subcommands: []*ffcli.Command{
+			control.NewCmd(os.Stdout),
 			discover.NewCmd(os.Stdout),
 			publish.NewCmd(os.Stdout),
 			status.NewCmd(os.Stdout),

@@ -20,6 +20,7 @@ values. Doing so also breaks the notifications feature.
 
 A command line client is provided, implementing two subcommands:
 
+* `control`: lets you configure certain aspects of the device
 * `discover`: uses multicast CoAP to find compatible devices on your network
 * `publish`: publishes the data to MQTT
 * `status`: like publish, but outputs on the CLI instead
