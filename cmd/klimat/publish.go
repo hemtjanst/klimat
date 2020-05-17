@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -27,10 +26,6 @@ const (
 	twoWeeks = 336 // hours
 )
 
-var (
-	publishFlagset = flag.NewFlagSet("klimat publish", flag.ExitOnError)
-)
-
 type publishConfig struct {
 	out     io.Writer
 	host    string
@@ -39,9 +34,10 @@ type publishConfig struct {
 }
 
 func newPublishCmd(out io.Writer) *ffcli.Command {
+	publishFlagset := flag.NewFlagSet("klimat publish", flag.ExitOnError)
 	mqCfg := mqtt.MustFlags(publishFlagset.String, publishFlagset.Bool)
 
-	config := &publishConfig{
+	config := publishConfig{
 		out:     out,
 		host:    "",
 		mqttcfg: mqCfg,
@@ -62,24 +58,15 @@ func newPublishCmd(out io.Writer) *ffcli.Command {
 	}
 }
 
-func (c publishConfig) Exec(ctx context.Context, args []string) error {
-	cl := connectToDevice(ctx, c.host)
-	devInfo, err := getWithTimeout(ctx, cl, "/sys/dev/info")
+func (c *publishConfig) Exec(ctx context.Context, args []string) error {
+	cl, err := philips.New(ctx, c.host)
 	if err != nil {
-		return fmt.Errorf("could not get device info: %w", err)
-	}
-	log.Print("Received device info")
-	if c.debug {
-		log.Printf("raw info: %s", devInfo.Payload())
+		return err
 	}
 
-	var info philips.Info
-	if err := json.Unmarshal(devInfo.Payload(), &info); err != nil {
-		return fmt.Errorf("could not decode info: %w", err)
-	}
-
-	if c.debug {
-		log.Printf("info: %+v", info)
+	info, err := cl.Info()
+	if err != nil {
+		return err
 	}
 
 	mq := connectMqtt(ctx, c.mqttcfg())
@@ -114,15 +101,9 @@ func (c publishConfig) Exec(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to create device: %w", err)
 	}
 
-	sess := philips.NewID()
-	_, err = cl.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
+	obs, err := cl.Status(handleObserve(dev))
 	if err != nil {
-		return fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
-	}
-
-	obs, err := cl.ObserveWithContext(ctx, "/sys/dev/status", handleObserve(dev, c.debug))
-	if err != nil {
-		return fmt.Errorf("failed to start observe on /sys/dev/status: %w", err)
+		return err
 	}
 
 	log.Print("Done initialising, publishing updates to MQTT")
@@ -131,22 +112,6 @@ func (c publishConfig) Exec(ctx context.Context, args []string) error {
 	obs.Cancel()
 
 	return nil
-}
-
-func connectToDevice(ctx context.Context, address string) *coap.ClientConn {
-	cl := coap.Client{
-		Net:         "udp",
-		DialTimeout: 5 * time.Second,
-		// Internally the time is divided by 6, so this results in a ping/pong every 5s
-		// which is what the Air Matters app does
-		KeepAlive: coap.MustMakeKeepAlive(30 * time.Second),
-	}
-
-	conn, err := cl.DialWithContext(ctx, address)
-	if err != nil {
-		log.Fatalf("Error dialing: %v", err)
-	}
-	return conn
 }
 
 func connectMqtt(ctx context.Context, config *mqtt.Config) mqtt.MQTT {
@@ -170,22 +135,12 @@ func connectMqtt(ctx context.Context, config *mqtt.Config) mqtt.MQTT {
 	return tr
 }
 
-func getWithTimeout(ctx context.Context, cl *coap.ClientConn, path string) (coap.Message, error) {
-	timeout, tcancel := context.WithTimeout(ctx, 5*time.Second)
-	defer tcancel()
-	return cl.GetWithContext(timeout, path)
-}
-
-func handleObserve(dev client.Device, debug bool) func(req *coap.Request) {
+func handleObserve(dev client.Device) func(req *coap.Request) {
 	// If the message was confirmable, confirm it before
 	// proceeding with decoding it. This ensures that even
 	// if we hit decoding issues, we always confirm the
 	// message so the device continues sending new messages
 	return func(req *coap.Request) {
-		if debug {
-			log.Printf("payload: %s", req.Msg.Payload())
-		}
-
 		if req.Msg.IsConfirmable() {
 			m := req.Client.NewMessage(coap.MessageParams{
 				Type:      coap.Acknowledgement,
@@ -195,27 +150,21 @@ func handleObserve(dev client.Device, debug bool) func(req *coap.Request) {
 			m.SetOption(coap.ContentFormat, coap.TextPlain)
 			m.SetOption(coap.LocationPath, req.Msg.Path())
 			if err := req.Client.WriteMsg(m); err != nil {
-				log.Print("failed to acknowledge message")
+				log.Printf("failed to acknowledge message: %v", err)
 			}
 		}
 
 		resp, err := philips.DecodeMessage(req.Msg.Payload())
 		if err != nil {
-			log.Println(err)
+			log.Printf("failed to decode: %v, payload: %s", err, string(req.Msg.Payload()))
 			return
-		}
-		if debug {
-			log.Printf("decoded message: %s", resp)
 		}
 
 		var data philips.Status
 		err = json.Unmarshal(resp, &data)
 		if err != nil {
-			log.Println(err)
+			log.Printf("failed to unmarshal JSON: %v", err)
 			return
-		}
-		if debug {
-			log.Printf("status: %+v", data)
 		}
 
 		update := data.State.Reported

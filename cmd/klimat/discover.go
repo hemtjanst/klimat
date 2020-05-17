@@ -15,19 +15,18 @@ import (
 	"hemtjan.st/klimat/philips"
 )
 
-var discoverFlagset = flag.NewFlagSet("klimat discover", flag.ExitOnError)
-
 type discoverConfig struct {
 	out  io.Writer
 	host string
 }
 
 func newDiscoverCmd(out io.Writer) *ffcli.Command {
-	config := &discoverConfig{
+	config := discoverConfig{
 		out:  out,
 		host: "",
 	}
 
+	discoverFlagset := flag.NewFlagSet("klimat discover", flag.ExitOnError)
 	discoverFlagset.StringVar(&config.host, "address", "224.0.1.187:5683", "host:port for multicast discovery")
 
 	return &ffcli.Command{
@@ -44,7 +43,7 @@ func newDiscoverCmd(out io.Writer) *ffcli.Command {
 	}
 }
 
-func (c discoverConfig) Exec(ctx context.Context, args []string) error {
+func (c *discoverConfig) Exec(ctx context.Context, args []string) error {
 	client := &coap.MulticastClient{
 		DialTimeout: 5 * time.Second,
 	}
