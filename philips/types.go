@@ -184,6 +184,7 @@ type Status struct {
 // Desired, when sending commands
 type State struct {
 	Reported *Reported `json:"reported,omitempty"`
+	Desired  *Desired  `json:"desired,omitempty"`
 }
 
 // Reported represents the current state/configuration of the device
@@ -251,4 +252,25 @@ type Reported struct {
 	HEPAFilterReplaceIn               int    `json:"fltsts1"`
 	ActiveCarbonFilterReplaceIn       int    `json:"fltsts2"`
 	WickReplaceIn                     int    `json:"wicksts"`
+}
+
+// Desired is used to send a new state on the device
+type Desired struct {
+	Power                  *Power      `json:"pwr,omitempty"`
+	Brightness             *Brightness `json:"aqil,omitempty"`
+	Mode                   *Mode       `json:"mode,omitempty"`
+	RelativeHumidityTarget *int        `json:"rhset,omitempty"`
+	Function               *Function   `json:"func,omitempty"`
+	ChildLock              *bool       `json:"cl,omitempty"`
+	FanSpeed               *FanSpeed   `json:"om,omitempty"`
+}
+
+// BoolP returns a pointer to a boolean
+func BoolP(b bool) *bool {
+	return &b
+}
+
+// IntP returns a pointer to an int
+func IntP(i int) *int {
+	return &i
 }
