@@ -41,7 +41,7 @@ func ParseID(data []byte) SessionID {
 
 // NewID constructs a new valid SessionID
 func NewID() SessionID {
-	return SessionID(rnd.Uint32())
+	return SessionID(rnd.Int31())
 }
 
 // Hex returns the hex representation of our SessionID

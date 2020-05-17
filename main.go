@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-ocf/go-coap"
@@ -131,10 +132,13 @@ func run(ctx context.Context, address string, mqttConfig *mqtt.Config, out io.Wr
 	}
 
 	sess := philips.NewID()
-	_, err = cl.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
+	rsp, err := cl.PostWithContext(ctx, "/sys/dev/sync", coap.TextPlain, bytes.NewReader([]byte(sess.Hex())))
 	if err != nil {
 		return fmt.Errorf("failed to post to /sys/dev/sync and get session: %w", err)
 	}
+
+	myId := philips.ParseID(rsp.Payload()) + 1
+	idLock := sync.RWMutex{}
 
 	obs, err := cl.ObserveWithContext(ctx, "/sys/dev/status", handleObserve(dev))
 	if err != nil {
@@ -142,6 +146,21 @@ func run(ctx context.Context, address string, mqttConfig *mqtt.Config, out io.Wr
 	}
 
 	log.Print("Done initialising, publishing updates to MQTT")
+
+	_ = dev.Feature("on").OnSetFunc(func(v string) {
+		if v != "1" {
+			v = "0"
+		}
+		data := `{"state":{"desired":{"pwr":"` + v + `"}}}`
+		idLock.Lock()
+		defer idLock.Unlock()
+		newMsg, err := philips.EncodeMessage(myId, []byte(data))
+		if err != nil {
+			return
+		}
+		myId++
+		_, _ = cl.Post("/sys/dev/control", coap.AppJSON, bytes.NewReader(newMsg))
+	})
 
 	<-ctx.Done()
 	obs.Cancel()
