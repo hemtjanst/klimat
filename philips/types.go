@@ -177,71 +177,78 @@ const (
 
 // Status is the status object returned by the /sys/dev/status endpoint
 type Status struct {
-	State struct {
-		Reported struct {
-			// Device name, as it shows in the app
-			Name string `json:"name"`
-			// Device model
-			Type string `json:"type"`
-			// Device model ID, same as Type but with /XX at the end
-			ModelID         string `json:"modelid"`
-			FirmwareVersion string `json:"swversion"`
-			// Is 0.0.0 always?
-			DeviceVersion string `json:"DeviceVersion"`
-			// Over The Air update
-			// No idea what the value means, seeing 'ck' on one
-			OTA string `json:"ota"`
-			// Amount of hours the device has been powered on
-			Runtime     int    `json:"Runtime"`
-			WiFiVersion string `json:"WifiVersion"`
-			// Some crazy long identifier
-			ProductID string `json:"ProductId"`
-			// Some crazy long identifier
-			DeviceID string `json:"DeviceId"`
-			// How status is reported, 'localcontrol'
-			StatusType string `json:"StatusType"`
-			// If it's connected to cloud, 'Localcontrol'
-			ConnectType string   `json:"ConnectType"`
-			FanSpeed    FanSpeed `json:"om"`
-			// Is the device powered on, 1 yes, 0 no
-			Power Power `json:"pwr"`
-			// Is child lock enabled, i.e do the buttons on the device respond
-			ChildLock bool `json:"cl"`
-			// Brightness of the display/ring
-			Brightness Brightness `json:"aqil"`
-			// Backlight of the buttons
-			ButtonBacklight string `json:"uil"`
-			// Hours set on the timer
-			Timer int `json:"dt"`
-			// Time left on the timer in minutes
-			TimerTimeLeft int `json:"dtrs"`
-			// Operating mode of the device
-			Mode Mode `json:"mode"`
-			// Activated function
-			Function Function `json:"func"`
-			// Desired relative humidity
-			RelativeHumidityTarget int `json:"rhset"`
-			// Meassured relative humidity
-			RelativeHumidity    int        `json:"rh"`
-			Temperature         int        `json:"temp"`
-			ParticulateMatter25 int        `json:"pm25"`
-			AirQuality          AirQuality `json:"iaql"`
-			// App push notification when air quality crosses a threshold
-			AirQuailityIndexNotificationThreshold int `json:"aqit"`
-			// What value is shown on the display
-			DisplayMode DisplayMode `json:"ddp"`
-			// Unknown, seemingly always 0?
-			Rddp string `json:"rddp"`
-			// Error code
-			Err        ErrorCode `json:"err"`
-			WaterLevel int       `json:"wl"`
-			// Which code gets displayed when a filter needs replacement
-			HEPAFilterReplacementCode         string `json:"fltt1"`
-			ActiveCarbonFilterReplacementCode string `json:"fltt2"`
-			PrefilterAndWickCleanIn           int    `json:"fltsts0"`
-			HEPAFilterReplaceIn               int    `json:"fltsts1"`
-			ActiveCarbonFilterReplaceIn       int    `json:"fltsts2"`
-			WickReplaceIn                     int    `json:"wicksts"`
-		} `json:"reported"`
-	} `json:"state"`
+	State State `json:"state"`
+}
+
+// State can contain either Reported, when information was requested, or
+// Desired, when sending commands
+type State struct {
+	Reported *Reported `json:"reported,omitempty"`
+}
+
+// Reported represents the current state/configuration of the device
+type Reported struct {
+	// Device name, as it shows in the app
+	Name string `json:"name"`
+	// Device model
+	Type string `json:"type"`
+	// Device model ID, same as Type but with /XX at the end
+	ModelID         string `json:"modelid"`
+	FirmwareVersion string `json:"swversion"`
+	// Is 0.0.0 always?
+	DeviceVersion string `json:"DeviceVersion"`
+	// Over The Air update
+	// No idea what the value means, seeing 'ck' on one
+	OTA string `json:"ota"`
+	// Amount of hours the device has been powered on
+	Runtime     int    `json:"Runtime"`
+	WiFiVersion string `json:"WifiVersion"`
+	// Some crazy long identifier
+	ProductID string `json:"ProductId"`
+	// Some crazy long identifier
+	DeviceID string `json:"DeviceId"`
+	// How status is reported, 'localcontrol'
+	StatusType string `json:"StatusType"`
+	// If it's connected to cloud, 'Localcontrol'
+	ConnectType string   `json:"ConnectType"`
+	FanSpeed    FanSpeed `json:"om"`
+	// Is the device powered on, 1 yes, 0 no
+	Power Power `json:"pwr"`
+	// Is child lock enabled, i.e do the buttons on the device respond
+	ChildLock bool `json:"cl"`
+	// Brightness of the display/ring
+	Brightness Brightness `json:"aqil"`
+	// Backlight of the buttons
+	ButtonBacklight string `json:"uil"`
+	// Hours set on the timer
+	Timer int `json:"dt"`
+	// Time left on the timer in minutes
+	TimerTimeLeft int `json:"dtrs"`
+	// Operating mode of the device
+	Mode Mode `json:"mode"`
+	// Activated function
+	Function Function `json:"func"`
+	// Desired relative humidity
+	RelativeHumidityTarget int `json:"rhset"`
+	// Meassured relative humidity
+	RelativeHumidity    int        `json:"rh"`
+	Temperature         int        `json:"temp"`
+	ParticulateMatter25 int        `json:"pm25"`
+	AirQuality          AirQuality `json:"iaql"`
+	// App push notification when air quality crosses a threshold
+	AirQuailityIndexNotificationThreshold int `json:"aqit"`
+	// What value is shown on the display
+	DisplayMode DisplayMode `json:"ddp"`
+	// Unknown, seemingly always 0?
+	Rddp string `json:"rddp"`
+	// Error code
+	Err        ErrorCode `json:"err"`
+	WaterLevel int       `json:"wl"`
+	// Which code gets displayed when a filter needs replacement
+	HEPAFilterReplacementCode         string `json:"fltt1"`
+	ActiveCarbonFilterReplacementCode string `json:"fltt2"`
+	PrefilterAndWickCleanIn           int    `json:"fltsts0"`
+	HEPAFilterReplaceIn               int    `json:"fltsts1"`
+	ActiveCarbonFilterReplaceIn       int    `json:"fltsts2"`
+	WickReplaceIn                     int    `json:"wicksts"`
 }
