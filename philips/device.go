@@ -56,8 +56,9 @@ func (d *Device) Info() (*Info, error) {
 	return &info, nil
 }
 
-// Session returns the session ID. It must be called once at the start
-// and then incremented each time after a call to EncodeMessage()
+// Session returns the session ID. It must be called once, before you
+// do an Observe or want to send a command. After sending a command you
+// have to increment the ID
 func (d *Device) Session() (SessionID, error) {
 	sess := NewID()
 	ctx, cancel := context.WithTimeout(d.ctx, 5*time.Second)
