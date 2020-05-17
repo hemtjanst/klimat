@@ -12,6 +12,7 @@ import (
 
 	"hemtjan.st/klimat/cmd/klimat/discover"
 	"hemtjan.st/klimat/cmd/klimat/publish"
+	"hemtjan.st/klimat/cmd/klimat/status"
 )
 
 var (
@@ -42,8 +43,12 @@ func main() {
 		LongHelp: "This CLI can be used to interact with climate devices. " +
 			"Right now it only supports interafcing with Philips AirCombi " +
 			"devices.",
-		FlagSet:     rootFlagset,
-		Subcommands: []*ffcli.Command{discover.NewCmd(os.Stdout), publish.NewCmd(os.Stdout)},
+		FlagSet: rootFlagset,
+		Subcommands: []*ffcli.Command{
+			discover.NewCmd(os.Stdout),
+			publish.NewCmd(os.Stdout),
+			status.NewCmd(os.Stdout),
+		},
 		Exec: func(context.Context, []string) error {
 			return flag.ErrHelp
 		},

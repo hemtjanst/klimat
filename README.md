@@ -22,6 +22,7 @@ A command line client is provided, implementing two subcommands:
 
 * `discover`: uses multicast CoAP to find compatible devices on your network
 * `publish`: publishes the data to MQTT
+* `status`: like publish, but outputs on the CLI instead
 
 ## `philips`
 
