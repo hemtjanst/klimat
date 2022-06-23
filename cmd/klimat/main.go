@@ -18,14 +18,21 @@ import (
 
 var (
 	rootFlagset = flag.NewFlagSet("klimat", flag.ExitOnError)
+
+	version = "unknown"
+	commit  = "unknown"
+	date    = "unknown"
 )
 
 func main() {
 	log.SetOutput(os.Stdout)
 
+	var fversion bool
+	rootFlagset.BoolVar(&fversion, "version", false, "print version info")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	signal.Notify(c, os.Interrupt)
 	defer func() {
 		signal.Stop(c)
 		cancel()
@@ -52,6 +59,10 @@ func main() {
 			status.NewCmd(os.Stdout),
 		},
 		Exec: func(context.Context, []string) error {
+			if fversion {
+				fmt.Fprintf(os.Stdout, `{"version": "%s", "commit": "%s", "date": "%s"}`, version, commit, date)
+				os.Exit(0)
+			}
 			return flag.ErrHelp
 		},
 	}

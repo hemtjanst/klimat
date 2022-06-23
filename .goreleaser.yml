@@ -1,0 +1,25 @@
+builds:
+  - binary: klimat
+    main: ./cmd/klimat
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s
+      - -w
+      - -X main.version={{.Version}} -X main.commit={{.FullCommit}} -X main.date={{.CommitDate}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - 7
+archives:
+  - builds:
+      - klimat
+    wrap_in_directory: true
+    files:
+      - LICENSE
+      - README.md
